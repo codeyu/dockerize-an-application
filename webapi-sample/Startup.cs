@@ -1,14 +1,18 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using TodoApi.Auth;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Http;
+using Newtonsoft.Json;
 using TodoApi.Models;
-using Microsoft.EntityFrameworkCore;
+
 namespace TodoApi
 {
     public class Startup
@@ -30,7 +34,12 @@ namespace TodoApi
         {
             // requires using Microsoft.EntityFrameworkCore;
             services.AddDbContext<TodoContext>(opt => opt.UseInMemoryDatabase());
-
+            services.AddAuthorization(auth =>
+            {
+                auth.AddPolicy("Bearer", new AuthorizationPolicyBuilder()
+                    .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme‌​)
+                    .RequireAuthenticatedUser().Build());
+            });
             // Add framework services.
             services.AddMvc();
             
@@ -42,7 +51,48 @@ namespace TodoApi
         {
             loggerFactory.AddConsole(Configuration.GetSection("Logging"));
             loggerFactory.AddDebug();
+            #region Handle Exception
+            app.UseExceptionHandler(appBuilder => {
+                appBuilder.Use(async (context, next) => {
+                    var error = context.Features[typeof(IExceptionHandlerFeature)] as IExceptionHandlerFeature;
 
+                    //when authorization has failed, should retrun a json message to client
+                    if (error != null && error.Error is SecurityTokenExpiredException)
+                    {
+                        context.Response.StatusCode = 401;
+                        context.Response.ContentType = "application/json";
+
+                        await context.Response.WriteAsync(JsonConvert.SerializeObject(
+                            new { authenticated = false, tokenExpired = true }
+                        ));
+                    }
+                    //when orther error, retrun a error message json to client
+                    else if (error != null && error.Error != null)
+                    {
+                        context.Response.StatusCode = 500;
+                        context.Response.ContentType = "application/json";
+                        await context.Response.WriteAsync(JsonConvert.SerializeObject(
+                            new { success = false, error = error.Error.Message }
+                        ));
+                    }
+                    //when no error, do next.
+                    else await next();
+                });
+            });
+            #endregion
+
+            #region UseJwtBearerAuthentication
+            app.UseJwtBearerAuthentication(new JwtBearerOptions {
+                TokenValidationParameters = new TokenValidationParameters {
+                    IssuerSigningKey = TokenAuthOption.Key,
+                    ValidAudience = TokenAuthOption.Audience,
+                    ValidIssuer = TokenAuthOption.Issuer,
+                    ValidateIssuerSigningKey = true,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromMinutes(0)
+                }
+            });
+            #endregion
             app.UseMvc();
         }
     }

@@ -6,9 +6,9 @@ namespace TodoApi.Auth
     {
         public static RSAParameters GenerateKey()
         {
-            using (var key = new RSACryptoServiceProvider(2048))
+            using (var rsa = RSA.Create())
             {
-                return key.ExportParameters(true);
+                return rsa.ExportParameters(true);
             }
         }
     }

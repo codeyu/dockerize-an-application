@@ -12,7 +12,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
 using TodoApi.Models;
-
+using Microsoft.EntityFrameworkCore;
 namespace TodoApi
 {
     public class Startup
@@ -93,7 +93,12 @@ namespace TodoApi
                 }
             });
             #endregion
-            app.UseMvc();
+            app.UseMvc(routes => 
+            { 
+                routes.MapRoute( 
+                    name: "default", 
+                    template: "{controller=Login}/{action=Index}"); 
+            }); 
         }
     }
 }
